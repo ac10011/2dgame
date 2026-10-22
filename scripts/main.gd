@@ -5,7 +5,11 @@ const GRID_SIZE := Vector2i(24, 18)
 const ORIGIN := Vector2(480, 250)
 var plots: Dictionary = {}
 var buildings: Dictionary = {}
-var inventory: Dictionary = {"turnip_seed": 10, "turnip": 0, "wood": 20}
+var inventory: Dictionary = {"turnip_seed": 10, "turnip": 0, "wood": 20, "stone": 0, "herb": 0, "gold": 0}
+var mode := "farm"
+var resources: Dictionary = {Vector2i(5, 5): "wood", Vector2i(8, 7): "stone", Vector2i(12, 6): "herb", Vector2i(16, 9): "wood"}
+var quest_active := false
+var quest_done := false
 var selected_tool := "hoe"
 var status := "工具 1 锄地"
 var day := 1
@@ -30,6 +34,28 @@ func _unhandled_input(event: InputEvent) -> void:
 		KEY_N: advance_day()
 		KEY_F5: save_game()
 		KEY_F9: load_game()
+		KEY_E: toggle_exploration()
+		KEY_R: gather_resource()
+		KEY_K: quest_action()
+
+func toggle_exploration() -> void:
+	mode = "explore" if mode == "farm" else "farm"
+	status = "进入湿地探索区" if mode == "explore" else "返回农场"
+
+func gather_resource() -> void:
+	if mode != "explore": status = "请先按 E 进入探索区"; return
+	var player := get_node_or_null("Player"); if player == null: return
+	var cell := world_to_cell(player.position)
+	if resources.has(cell):
+		var kind: String = resources[cell]; inventory[kind] = int(inventory.get(kind, 0)) + 1; resources.erase(cell); status = "采集了 %s" % kind
+	else: status = "附近没有可采集资源"
+
+func quest_action() -> void:
+	if not quest_active and not quest_done:
+		quest_active = true; status = "接受委托：交付 3 个木材"
+	elif quest_active and int(inventory.get("wood", 0)) >= 3:
+		inventory.wood -= 3; inventory.gold += 50; quest_active = false; quest_done = true; status = "委托完成，获得 50 金币"
+	else: status = "还需要更多木材"
 
 func interact_with_plot() -> void:
 	var player := get_node_or_null("Player")
@@ -57,9 +83,17 @@ func interact_with_plot() -> void:
 			else: status = "作物还没有成熟"
 
 func save_game() -> void:
-	var data := {"day": day, "plots": {}, "buildings": {}, "inventory": inventory}
+	var data := {"day": day, "plots": {}, "buildings": {}, "inventory": inventory, "mode": mode, "quest_active": quest_active, "quest_done": quest_done}
 	for cell in plots:
 		data.plots["%d,%d" % [cell.x, cell.y]] = plots[cell]
+	if mode == "explore":
+		for cell in resources:
+			var rp := cell_to_world(cell)
+			var kind: String = resources[cell]
+			var rc := Color("#8a5a38") if kind == "wood" else (Color("#8d9298") if kind == "stone" else Color("#70b34d"))
+			draw_circle(rp + Vector2(0, -8), 9.0, rc)
+			draw_circle(rp + Vector2(-6, -13), 5.0, rc.lightened(0.2))
+
 	for cell in buildings:
 		data.buildings["%d,%d" % [cell.x, cell.y]] = buildings[cell]
 	var file := FileAccess.open("user://farm_save.json", FileAccess.WRITE)
@@ -78,7 +112,7 @@ func load_game() -> void:
 	if typeof(data) != TYPE_DICTIONARY:
 		status = "存档格式错误"
 		return
-	day = int(data.get("day", 1)); plots.clear(); buildings.clear(); inventory = data.get("inventory", {"turnip_seed": 10, "turnip": 0, "wood": 20})
+	day = int(data.get("day", 1)); plots.clear(); buildings.clear(); inventory = data.get("inventory", {"turnip_seed": 10, "turnip": 0, "wood": 20}); mode = str(data.get("mode", "farm")); quest_active = bool(data.get("quest_active", false)); quest_done = bool(data.get("quest_done", false))
 	for key in data.get("plots", {}):
 		var parts := key.split(","); plots[Vector2i(int(parts[0]), int(parts[1]))] = int(data.plots[key])
 	for key in data.get("buildings", {}):
@@ -129,7 +163,7 @@ func _draw() -> void:
 			var p := cell_to_world(cell)
 			var points := PackedVector2Array([p + Vector2(0, -TILE.y * 0.5), p + Vector2(TILE.x * 0.5, 0), p + Vector2(0, TILE.y * 0.5), p - Vector2(TILE.x * 0.5, 0)])
 			var state: int = plots.get(cell, 0)
-			var color := Color("#7a9e5c") if (x + y) % 2 == 0 else Color("#709552")
+			var color := (Color("#5f8f70") if (x + y) % 2 == 0 else Color("#568267")) if mode == "explore" else (Color("#7a9e5c") if (x + y) % 2 == 0 else Color("#709552"))
 			if state == 1: color = Color("#8b5a3b")
 			elif state == 2: color = Color("#6c492f")
 			elif state == 3: color = Color("#365e78")
@@ -138,6 +172,14 @@ func _draw() -> void:
 			draw_polyline(PackedVector2Array([points[0], points[1], points[2], points[3], points[0]]), Color("#4d7544"), 1.0)
 			if state >= 2:
 				draw_circle(p + Vector2(0, -8), 4.0 if state < 4 else 8.0, Color("#86bd4a") if state < 4 else Color("#e5be55"))
+	if mode == "explore":
+		for cell in resources:
+			var rp := cell_to_world(cell)
+			var kind: String = resources[cell]
+			var rc := Color("#8a5a38") if kind == "wood" else (Color("#8d9298") if kind == "stone" else Color("#70b34d"))
+			draw_circle(rp + Vector2(0, -8), 9.0, rc)
+			draw_circle(rp + Vector2(-6, -13), 5.0, rc.lightened(0.2))
+
 	for cell in buildings:
 		var bp := cell_to_world(cell)
 		var kind: String = buildings[cell]
@@ -158,6 +200,6 @@ func _draw() -> void:
 			draw_polyline(highlight, Color("#f6df75"), 2.0)
 	var font := ThemeDB.fallback_font
 	draw_string(font, Vector2(20, 28), "四季边境 · 农场原型", HORIZONTAL_ALIGNMENT_LEFT, -1, 18, Color.WHITE)
-	draw_string(font, Vector2(20, 52), "1 锄地  2 播种  3 浇水  4 收获  |  空格操作  B 建造  X 拆除  N 过一天  F5保存 F9读取", HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color("#d7e7d1"))
+	draw_string(font, Vector2(20, 52), "1 锄地  2 播种  3 浇水  4 收获  |  空格操作  B 建造  X 拆除  N 过一天  F5/F9存读  E探索 R采集 K委托", HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color("#d7e7d1"))
 	draw_string(font, Vector2(20, 76), "第 %d 天 · %s" % [day, status], HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color("#f6df75"))
-	draw_string(font, Vector2(20, 98), "种子 %d  萝卜 %d  木材 %d" % [inventory.turnip_seed, inventory.turnip, inventory.wood], HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color("#f2d49b"))
+	draw_string(font, Vector2(20, 98), "区域 %s  | 种子 %d  萝卜 %d  木材 %d  石头 %d  草药 %d  金币 %d" % [mode, inventory.turnip_seed, inventory.turnip, inventory.wood, inventory.stone, inventory.herb, inventory.gold], HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color("#f2d49b"))
