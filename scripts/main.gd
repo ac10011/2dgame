@@ -5,6 +5,7 @@ const GRID_SIZE := Vector2i(24, 18)
 const ORIGIN := Vector2(480, 250)
 var plots: Dictionary = {}
 var buildings: Dictionary = {}
+var inventory: Dictionary = {"turnip_seed": 10, "turnip": 0, "wood": 20}
 var selected_tool := "hoe"
 var status := "工具 1 锄地"
 var day := 1
@@ -43,17 +44,20 @@ func interact_with_plot() -> void:
 			if value == 0: plots[cell] = 1; status = "已锄地"
 			else: status = "这里已经准备好了"
 		"seed":
-			if value == 1: plots[cell] = 2; status = "已播种"
-			else: status = "需要先锄地"
+			if value == 1 and inventory.turnip_seed > 0:
+				inventory.turnip_seed -= 1; plots[cell] = 2; status = "已播种"
+			elif value != 1: status = "需要先锄地"
+			else: status = "没有种子了"
 		"water":
 			if value >= 2: plots[cell] = 3; status = "已浇水"
 			else: status = "需要先播种"
 		"harvest":
-			if value == 4: plots[cell] = 1; status = "收获完成"
+			if value == 4:
+				inventory.turnip += 1; plots[cell] = 1; status = "收获完成，获得萝卜"
 			else: status = "作物还没有成熟"
 
 func save_game() -> void:
-	var data := {"day": day, "plots": {}, "buildings": {}}
+	var data := {"day": day, "plots": {}, "buildings": {}, "inventory": inventory}
 	for cell in plots:
 		data.plots["%d,%d" % [cell.x, cell.y]] = plots[cell]
 	for cell in buildings:
@@ -74,7 +78,7 @@ func load_game() -> void:
 	if typeof(data) != TYPE_DICTIONARY:
 		status = "存档格式错误"
 		return
-	day = int(data.get("day", 1)); plots.clear(); buildings.clear()
+	day = int(data.get("day", 1)); plots.clear(); buildings.clear(); inventory = data.get("inventory", {"turnip_seed": 10, "turnip": 0, "wood": 20})
 	for key in data.get("plots", {}):
 		var parts := key.split(","); plots[Vector2i(int(parts[0]), int(parts[1]))] = int(data.plots[key])
 	for key in data.get("buildings", {}):
@@ -85,9 +89,12 @@ func place_building() -> void:
 	var player := get_node_or_null("Player")
 	if player == null: return
 	var cell := world_to_cell(player.position)
-	if _valid_cell(cell) and not buildings.has(cell):
+	if _valid_cell(cell) and not buildings.has(cell) and inventory.wood >= 5:
+		inventory.wood -= 5
 		buildings[cell] = "house" if buildings.size() % 2 == 0 else "chest"
 		status = "已放置建筑"
+	elif inventory.wood < 5:
+		status = "木材不足（需要 5）"
 	else:
 		status = "这里已有建筑或不在农场内"
 
@@ -153,3 +160,4 @@ func _draw() -> void:
 	draw_string(font, Vector2(20, 28), "四季边境 · 农场原型", HORIZONTAL_ALIGNMENT_LEFT, -1, 18, Color.WHITE)
 	draw_string(font, Vector2(20, 52), "1 锄地  2 播种  3 浇水  4 收获  |  空格操作  B 建造  X 拆除  N 过一天  F5保存 F9读取", HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color("#d7e7d1"))
 	draw_string(font, Vector2(20, 76), "第 %d 天 · %s" % [day, status], HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color("#f6df75"))
+	draw_string(font, Vector2(20, 98), "种子 %d  萝卜 %d  木材 %d" % [inventory.turnip_seed, inventory.turnip, inventory.wood], HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color("#f2d49b"))
