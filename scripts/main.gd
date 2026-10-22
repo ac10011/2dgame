@@ -27,6 +27,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		KEY_B: place_building()
 		KEY_X: remove_building()
 		KEY_N: advance_day()
+		KEY_F5: save_game()
+		KEY_F9: load_game()
 
 func interact_with_plot() -> void:
 	var player := get_node_or_null("Player")
@@ -49,6 +51,35 @@ func interact_with_plot() -> void:
 		"harvest":
 			if value == 4: plots[cell] = 1; status = "收获完成"
 			else: status = "作物还没有成熟"
+
+func save_game() -> void:
+	var data := {"day": day, "plots": {}, "buildings": {}}
+	for cell in plots:
+		data.plots["%d,%d" % [cell.x, cell.y]] = plots[cell]
+	for cell in buildings:
+		data.buildings["%d,%d" % [cell.x, cell.y]] = buildings[cell]
+	var file := FileAccess.open("user://farm_save.json", FileAccess.WRITE)
+	if file:
+		file.store_string(JSON.stringify(data))
+		status = "已保存农场进度"
+	else:
+		status = "保存失败"
+
+func load_game() -> void:
+	if not FileAccess.file_exists("user://farm_save.json"):
+		status = "没有找到存档"
+		return
+	var file := FileAccess.open("user://farm_save.json", FileAccess.READ)
+	var data = JSON.parse_string(file.get_as_text())
+	if typeof(data) != TYPE_DICTIONARY:
+		status = "存档格式错误"
+		return
+	day = int(data.get("day", 1)); plots.clear(); buildings.clear()
+	for key in data.get("plots", {}):
+		var parts := key.split(","); plots[Vector2i(int(parts[0]), int(parts[1]))] = int(data.plots[key])
+	for key in data.get("buildings", {}):
+		var parts := key.split(","); buildings[Vector2i(int(parts[0]), int(parts[1]))] = str(data.buildings[key])
+	status = "已读取农场进度"
 
 func place_building() -> void:
 	var player := get_node_or_null("Player")
@@ -120,5 +151,5 @@ func _draw() -> void:
 			draw_polyline(highlight, Color("#f6df75"), 2.0)
 	var font := ThemeDB.fallback_font
 	draw_string(font, Vector2(20, 28), "四季边境 · 农场原型", HORIZONTAL_ALIGNMENT_LEFT, -1, 18, Color.WHITE)
-	draw_string(font, Vector2(20, 52), "1 锄地  2 播种  3 浇水  4 收获  |  空格操作  B 建造  X 拆除  N 过一天", HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color("#d7e7d1"))
+	draw_string(font, Vector2(20, 52), "1 锄地  2 播种  3 浇水  4 收获  |  空格操作  B 建造  X 拆除  N 过一天  F5保存 F9读取", HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color("#d7e7d1"))
 	draw_string(font, Vector2(20, 76), "第 %d 天 · %s" % [day, status], HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color("#f6df75"))
