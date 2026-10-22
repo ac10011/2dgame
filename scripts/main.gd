@@ -37,6 +37,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		KEY_E: toggle_exploration()
 		KEY_R: gather_resource()
 		KEY_K: quest_action()
+		KEY_S: shop_action()
 
 func toggle_exploration() -> void:
 	mode = "explore" if mode == "farm" else "farm"
@@ -56,6 +57,17 @@ func quest_action() -> void:
 	elif quest_active and int(inventory.get("wood", 0)) >= 3:
 		inventory.wood -= 3; inventory.gold += 50; quest_active = false; quest_done = true; status = "委托完成，获得 50 金币"
 	else: status = "还需要更多木材"
+
+func shop_action() -> void:
+	if mode != "farm":
+		status = "回到农场才能使用商店"
+		return
+	if inventory.gold >= 5:
+		inventory.gold -= 5; inventory.turnip_seed += 1; status = "购买 1 包种子（5 金币）"
+	elif inventory.turnip > 0:
+		inventory.turnip -= 1; inventory.gold += 10; status = "出售 1 个萝卜（10 金币）"
+	else:
+		status = "需要金币购买，或先收获萝卜"
 
 func interact_with_plot() -> void:
 	var player := get_node_or_null("Player")
@@ -86,13 +98,6 @@ func save_game() -> void:
 	var data := {"day": day, "plots": {}, "buildings": {}, "inventory": inventory, "mode": mode, "quest_active": quest_active, "quest_done": quest_done}
 	for cell in plots:
 		data.plots["%d,%d" % [cell.x, cell.y]] = plots[cell]
-	if mode == "explore":
-		for cell in resources:
-			var rp := cell_to_world(cell)
-			var kind: String = resources[cell]
-			var rc := Color("#8a5a38") if kind == "wood" else (Color("#8d9298") if kind == "stone" else Color("#70b34d"))
-			draw_circle(rp + Vector2(0, -8), 9.0, rc)
-			draw_circle(rp + Vector2(-6, -13), 5.0, rc.lightened(0.2))
 
 	for cell in buildings:
 		data.buildings["%d,%d" % [cell.x, cell.y]] = buildings[cell]
@@ -200,6 +205,6 @@ func _draw() -> void:
 			draw_polyline(highlight, Color("#f6df75"), 2.0)
 	var font := ThemeDB.fallback_font
 	draw_string(font, Vector2(20, 28), "四季边境 · 农场原型", HORIZONTAL_ALIGNMENT_LEFT, -1, 18, Color.WHITE)
-	draw_string(font, Vector2(20, 52), "1 锄地  2 播种  3 浇水  4 收获  |  空格操作  B 建造  X 拆除  N 过一天  F5/F9存读  E探索 R采集 K委托", HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color("#d7e7d1"))
+	draw_string(font, Vector2(20, 52), "1 锄地  2 播种  3 浇水  4 收获  |  空格操作  B 建造  X 拆除  N 过一天  F5/F9存读  E探索 R采集 K委托 S商店", HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color("#d7e7d1"))
 	draw_string(font, Vector2(20, 76), "第 %d 天 · %s" % [day, status], HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color("#f6df75"))
 	draw_string(font, Vector2(20, 98), "区域 %s  | 种子 %d  萝卜 %d  木材 %d  石头 %d  草药 %d  金币 %d" % [mode, inventory.turnip_seed, inventory.turnip, inventory.wood, inventory.stone, inventory.herb, inventory.gold], HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color("#f2d49b"))
